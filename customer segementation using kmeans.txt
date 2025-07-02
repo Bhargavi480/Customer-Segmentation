@@ -1,0 +1,511 @@
+CUSTOMER SEGEMENTATION USING KMEANS CLUSTERING
+
+
+
+
+# K-Means Customer Segmentation Analysis for Retail Store
+# Compatible with Google Colab
+
+# Import necessary libraries
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import silhouette_score
+from google.colab import files
+import warnings
+warnings.filterwarnings('ignore')
+
+# Set style for better visualizations
+plt.style.use('seaborn-v0_8')
+sns.set_palette("husl")
+
+print("=== K-Means Customer Segmentation Analysis ===")
+print("This program will help you segment customers based on their purchase behavior.")
+print("\nPlease upload your CSV file when prompted.")
+print("Expected columns: CustomerID, Annual Income, Spending Score, and other numerical features")
+print("-" * 70)
+
+class CustomerSegmentation:
+    def __init__(self):
+        """Initialize the Customer Segmentation class"""
+        self.data = None
+        self.processed_data = None
+        self.scaler = StandardScaler()
+        self.kmeans = None
+        self.optimal_clusters = None
+        
+    def upload_and_load_data(self):
+        """Upload and load the CSV dataset using Google Colab file upload widget"""
+        print("\n1. UPLOADING DATASET")
+        print("Please select your CSV file containing customer data...")
+        
+        # Upload file using Google Colab widget
+        uploaded = files.upload()
+        
+        # Get the filename
+        filename = list(uploaded.keys())[0]
+        
+        # Load the data
+        try:
+            self.data = pd.read_csv(filename)
+            print(f"✓ Dataset loaded successfully!")
+            print(f"Dataset shape: {self.data.shape}")
+            print(f"Columns: {list(self.data.columns)}")
+            
+            # Display first few rows
+            print("\nFirst 5 rows of the dataset:")
+            print(self.data.head())
+            
+            return True
+        except Exception as e:
+            print(f"Error loading dataset: {e}")
+            return False
+    
+    def explore_data(self):
+        """Perform basic data exploration"""
+        print("\n2. DATA EXPLORATION")
+        print("-" * 30)
+        
+        # Basic info
+        print("Dataset Info:")
+        print(f"Shape: {self.data.shape}")
+        print(f"Memory usage: {self.data.memory_usage().sum() / 1024:.2f} KB")
+        
+        # Check data types
+        print("\nData Types:")
+        print(self.data.dtypes)
+        
+        # Check for missing values
+        print("\nMissing Values:")
+        missing_vals = self.data.isnull().sum()
+        print(missing_vals[missing_vals > 0])
+        
+        # Basic statistics
+        print("\nBasic Statistics:")
+        print(self.data.describe())
+        
+        # Correlation matrix for numerical columns
+        numerical_cols = self.data.select_dtypes(include=[np.number]).columns
+        if len(numerical_cols) > 1:
+            plt.figure(figsize=(10, 8))
+            correlation_matrix = self.data[numerical_cols].corr()
+            sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', center=0)
+            plt.title('Correlation Matrix of Numerical Features')
+            plt.tight_layout()
+            plt.show()
+    
+    def preprocess_data(self):
+        """Preprocess the data for clustering"""
+        print("\n3. DATA PREPROCESSING")
+        print("-" * 30)
+        
+        # Make a copy of the original data
+        processed_df = self.data.copy()
+        
+        # Handle missing values
+        print("Handling missing values...")
+        numerical_cols = processed_df.select_dtypes(include=[np.number]).columns
+        
+        # Fill missing values with median for numerical columns
+        for col in numerical_cols:
+            if processed_df[col].isnull().sum() > 0:
+                median_val = processed_df[col].median()
+                processed_df[col].fillna(median_val, inplace=True)
+                print(f"  - Filled {col} missing values with median: {median_val:.2f}")
+        
+        # Keep only numerical columns (except ID columns)
+        id_columns = [col for col in processed_df.columns if 'id' in col.lower() or 'ID' in col]
+        numerical_features = [col for col in numerical_cols if col not in id_columns]
+        
+        print(f"\nNumerical features selected for clustering: {numerical_features}")
+        print(f"ID columns excluded: {id_columns}")
+        
+        # Select features for clustering
+        self.processed_data = processed_df[numerical_features]
+        
+        print(f"\nProcessed data shape: {self.processed_data.shape}")
+        print("Preprocessing completed successfully!")
+        
+        # Show processed data statistics
+        print("\nProcessed Data Statistics:")
+        print(self.processed_data.describe())
+        
+        return numerical_features, id_columns
+    
+    def find_optimal_clusters(self, max_clusters=10):
+        """Use Elbow Method to find optimal number of clusters"""
+        print("\n4. FINDING OPTIMAL NUMBER OF CLUSTERS")
+        print("-" * 40)
+        
+        # Standardize the data
+        scaled_data = self.scaler.fit_transform(self.processed_data)
+        
+        # Calculate WCSS (Within-Cluster Sum of Squares) for different k values
+        wcss = []
+        silhouette_scores = []
+        k_range = range(2, max_clusters + 1)
+        
+        print("Computing WCSS and Silhouette Scores...")
+        for k in k_range:
+            kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+            kmeans.fit(scaled_data)
+            wcss.append(kmeans.inertia_)
+            silhouette_scores.append(silhouette_score(scaled_data, kmeans.labels_))
+            print(f"  k={k}: WCSS={kmeans.inertia_:.2f}, Silhouette Score={silhouette_scores[-1]:.3f}")
+        
+        # Plot Elbow Curve
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+        
+        # WCSS Plot (Elbow Method)
+        ax1.plot(k_range, wcss, 'bo-', linewidth=2, markersize=8)
+        ax1.set_xlabel('Number of Clusters (k)')
+        ax1.set_ylabel('Within-Cluster Sum of Squares (WCSS)')
+        ax1.set_title('Elbow Method for Optimal k')
+        ax1.grid(True, alpha=0.3)
+        
+        # Silhouette Score Plot
+        ax2.plot(k_range, silhouette_scores, 'ro-', linewidth=2, markersize=8)
+        ax2.set_xlabel('Number of Clusters (k)')
+        ax2.set_ylabel('Silhouette Score')
+        ax2.set_title('Silhouette Score vs Number of Clusters')
+        ax2.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        plt.show()
+        
+        # Find optimal k using elbow method (simplified)
+        # Look for the point where the rate of decrease sharply changes
+        optimal_k_silhouette = k_range[np.argmax(silhouette_scores)]
+        
+        print(f"\nRecommended number of clusters based on Silhouette Score: {optimal_k_silhouette}")
+        
+        # Allow user to choose
+        while True:
+            try:
+                user_k = input(f"\nEnter the number of clusters you want to use (2-{max_clusters}) or press Enter for {optimal_k_silhouette}: ")
+                if user_k == "":
+                    self.optimal_clusters = optimal_k_silhouette
+                    break
+                else:
+                    user_k = int(user_k)
+                    if 2 <= user_k <= max_clusters:
+                        self.optimal_clusters = user_k
+                        break
+                    else:
+                        print(f"Please enter a number between 2 and {max_clusters}")
+            except ValueError:
+                print("Please enter a valid number")
+        
+        print(f"Selected number of clusters: {self.optimal_clusters}")
+        return self.optimal_clusters
+    
+    def perform_clustering(self):
+        """Apply K-Means clustering"""
+        print("\n5. PERFORMING K-MEANS CLUSTERING")
+        print("-" * 35)
+        
+        # Standardize the data
+        scaled_data = self.scaler.fit_transform(self.processed_data)
+        
+        # Apply K-Means
+        self.kmeans = KMeans(n_clusters=self.optimal_clusters, random_state=42, n_init=10)
+        cluster_labels = self.kmeans.fit_predict(scaled_data)
+        
+        # Add cluster labels to the original data
+        self.data['Cluster'] = cluster_labels
+        
+        # Calculate silhouette score
+        silhouette_avg = silhouette_score(scaled_data, cluster_labels)
+        
+        print(f"✓ K-Means clustering completed!")
+        print(f"Number of clusters: {self.optimal_clusters}")
+        print(f"Silhouette Score: {silhouette_avg:.3f}")
+        
+        # Display cluster distribution
+        cluster_counts = pd.Series(cluster_labels).value_counts().sort_index()
+        print(f"\nCluster Distribution:")
+        for cluster, count in cluster_counts.items():
+            percentage = (count / len(cluster_labels)) * 100
+            print(f"  Cluster {cluster}: {count} customers ({percentage:.1f}%)")
+        
+        return cluster_labels
+    
+    def visualize_clusters(self):
+        """Visualize the clusters in 2D and 3D"""
+        print("\n6. VISUALIZING CLUSTERS")
+        print("-" * 25)
+        
+        # Get feature names
+        feature_names = list(self.processed_data.columns)
+        n_features = len(feature_names)
+        
+        if n_features >= 2:
+            # 2D Visualization
+            self.plot_2d_clusters(feature_names)
+        
+        if n_features >= 3:
+            # 3D Visualization
+            self.plot_3d_clusters(feature_names)
+        
+        # Plot cluster characteristics
+        self.plot_cluster_characteristics()
+    
+    def plot_2d_clusters(self, feature_names):
+        """Create 2D scatter plots of clusters"""
+        n_features = len(feature_names)
+        
+        # Create subplots for different feature combinations
+        if n_features == 2:
+            fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+            scatter = ax.scatter(self.processed_data.iloc[:, 0], 
+                               self.processed_data.iloc[:, 1], 
+                               c=self.data['Cluster'], 
+                               cmap='viridis', 
+                               alpha=0.7, 
+                               s=50)
+            ax.set_xlabel(feature_names[0])
+            ax.set_ylabel(feature_names[1])
+            ax.set_title(f'Customer Segments: {feature_names[0]} vs {feature_names[1]}')
+            plt.colorbar(scatter, ax=ax, label='Cluster')
+            
+            # Plot centroids
+            centroids_original = self.scaler.inverse_transform(self.kmeans.cluster_centers_)
+            ax.scatter(centroids_original[:, 0], centroids_original[:, 1], 
+                      c='red', marker='x', s=200, linewidths=3, label='Centroids')
+            ax.legend()
+            
+        else:
+            # Multiple 2D plots for different feature pairs
+            n_plots = min(4, (n_features * (n_features - 1)) // 2)
+            fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+            axes = axes.ravel()
+            
+            plot_idx = 0
+            for i in range(n_features):
+                for j in range(i + 1, n_features):
+                    if plot_idx >= n_plots:
+                        break
+                    
+                    ax = axes[plot_idx]
+                    scatter = ax.scatter(self.processed_data.iloc[:, i], 
+                                       self.processed_data.iloc[:, j], 
+                                       c=self.data['Cluster'], 
+                                       cmap='viridis', 
+                                       alpha=0.7, 
+                                       s=50)
+                    ax.set_xlabel(feature_names[i])
+                    ax.set_ylabel(feature_names[j])
+                    ax.set_title(f'{feature_names[i]} vs {feature_names[j]}')
+                    
+                    # Plot centroids
+                    centroids_original = self.scaler.inverse_transform(self.kmeans.cluster_centers_)
+                    ax.scatter(centroids_original[:, i], centroids_original[:, j], 
+                              c='red', marker='x', s=100, linewidths=2)
+                    
+                    plot_idx += 1
+                    
+                if plot_idx >= n_plots:
+                    break
+            
+            # Hide unused subplots
+            for idx in range(plot_idx, len(axes)):
+                axes[idx].set_visible(False)
+            
+            plt.colorbar(scatter, ax=axes, label='Cluster')
+        
+        plt.tight_layout()
+        plt.show()
+    
+    def plot_3d_clusters(self, feature_names):
+        """Create 3D scatter plot of clusters"""
+        fig = plt.figure(figsize=(12, 9))
+        ax = fig.add_subplot(111, projection='3d')
+        
+        # Use first three features for 3D plot
+        scatter = ax.scatter(self.processed_data.iloc[:, 0], 
+                           self.processed_data.iloc[:, 1], 
+                           self.processed_data.iloc[:, 2], 
+                           c=self.data['Cluster'], 
+                           cmap='viridis', 
+                           alpha=0.6, 
+                           s=50)
+        
+        ax.set_xlabel(feature_names[0])
+        ax.set_ylabel(feature_names[1])
+        ax.set_zlabel(feature_names[2])
+        ax.set_title(f'3D Customer Segments: {feature_names[0]}, {feature_names[1]}, {feature_names[2]}')
+        
+        # Plot centroids
+        centroids_original = self.scaler.inverse_transform(self.kmeans.cluster_centers_)
+        ax.scatter(centroids_original[:, 0], centroids_original[:, 1], centroids_original[:, 2],
+                  c='red', marker='x', s=200, linewidths=3, label='Centroids')
+        
+        plt.colorbar(scatter, ax=ax, label='Cluster')
+        ax.legend()
+        plt.tight_layout()
+        plt.show()
+    
+    def plot_cluster_characteristics(self):
+        """Plot characteristics of each cluster"""
+        feature_names = list(self.processed_data.columns)
+        
+        # Calculate mean values for each cluster
+        cluster_stats = self.data.groupby('Cluster')[feature_names].mean()
+        
+        # Create bar plots
+        n_features = len(feature_names)
+        fig, axes = plt.subplots(1, n_features, figsize=(5 * n_features, 6))
+        
+        if n_features == 1:
+            axes = [axes]
+        
+        for i, feature in enumerate(feature_names):
+            axes[i].bar(range(self.optimal_clusters), cluster_stats[feature], 
+                       color=plt.cm.viridis(np.linspace(0, 1, self.optimal_clusters)))
+            axes[i].set_xlabel('Cluster')
+            axes[i].set_ylabel(f'Average {feature}')
+            axes[i].set_title(f'Average {feature} by Cluster')
+            axes[i].set_xticks(range(self.optimal_clusters))
+        
+        plt.tight_layout()
+        plt.show()
+    
+    def generate_summary(self):
+        """Generate and display clustering summary"""
+        print("\n7. CLUSTERING SUMMARY")
+        print("-" * 25)
+        
+        feature_names = list(self.processed_data.columns)
+        
+        # Cluster statistics
+        cluster_summary = self.data.groupby('Cluster')[feature_names].agg(['mean', 'std', 'count'])
+        
+        print("CLUSTER CHARACTERISTICS:")
+        print("=" * 50)
+        
+        for cluster in range(self.optimal_clusters):
+            print(f"\nCLUSTER {cluster}:")
+            print("-" * 15)
+            cluster_data = self.data[self.data['Cluster'] == cluster]
+            print(f"Size: {len(cluster_data)} customers ({len(cluster_data)/len(self.data)*100:.1f}%)")
+            
+            for feature in feature_names:
+                mean_val = cluster_data[feature].mean()
+                std_val = cluster_data[feature].std()
+                print(f"{feature}: {mean_val:.2f} ± {std_val:.2f}")
+        
+        # Centroids in original scale
+        print(f"\nCENTROIDS (Original Scale):")
+        print("=" * 30)
+        centroids_original = self.scaler.inverse_transform(self.kmeans.cluster_centers_)
+        centroid_df = pd.DataFrame(centroids_original, columns=feature_names)
+        centroid_df.index = [f'Cluster {i}' for i in range(self.optimal_clusters)]
+        print(centroid_df.round(2))
+        
+        # Business insights
+        print(f"\nBUSINESS INSIGHTS:")
+        print("=" * 20)
+        self.generate_business_insights(feature_names)
+        
+        return cluster_summary, centroid_df
+    
+    def generate_business_insights(self, feature_names):
+        """Generate business insights based on clustering results"""
+        # This is a template - customize based on your specific features
+        cluster_means = self.data.groupby('Cluster')[feature_names].mean()
+        
+        for cluster in range(self.optimal_clusters):
+            print(f"\nCluster {cluster} Profile:")
+            
+            # Analyze each feature
+            for feature in feature_names:
+                value = cluster_means.loc[cluster, feature]
+                overall_mean = self.processed_data[feature].mean()
+                
+                if value > overall_mean * 1.2:
+                    level = "High"
+                elif value < overall_mean * 0.8:
+                    level = "Low"
+                else:
+                    level = "Medium"
+                
+                print(f"  - {feature}: {level} ({value:.2f})")
+            
+            # Generate segment description
+            size = len(self.data[self.data['Cluster'] == cluster])
+            percentage = size / len(self.data) * 100
+            print(f"  - Segment Size: {size} customers ({percentage:.1f}%)")
+    
+    def export_results(self):
+        """Export clustering results to CSV"""
+        print("\n8. EXPORTING RESULTS")
+        print("-" * 20)
+        
+        # Create results dataframe
+        results_df = self.data.copy()
+        
+        # Save to CSV
+        results_df.to_csv('customer_segments.csv', index=False)
+        
+        # Download the file
+        files.download('customer_segments.csv')
+        
+        print("✓ Results exported to 'customer_segments.csv'")
+        print("✓ File downloaded to your local machine")
+        
+    def run_complete_analysis(self):
+        """Run the complete customer segmentation analysis"""
+        print("Starting Customer Segmentation Analysis...")
+        
+        # Step 1: Upload and load data
+        if not self.upload_and_load_data():
+            return
+        
+        # Step 2: Explore data
+        self.explore_data()
+        
+        # Step 3: Preprocess data
+        numerical_features, id_columns = self.preprocess_data()
+        
+        if len(numerical_features) < 2:
+            print("Error: Need at least 2 numerical features for clustering!")
+            return
+        
+        # Step 4: Find optimal clusters
+        self.find_optimal_clusters()
+        
+        # Step 5: Perform clustering
+        self.perform_clustering()
+        
+        # Step 6: Visualize results
+        self.visualize_clusters()
+        
+        # Step 7: Generate summary
+        cluster_summary, centroid_df = self.generate_summary()
+        
+        # Step 8: Export results
+        export_choice = input("\nWould you like to export the results? (y/n): ")
+        if export_choice.lower() == 'y':
+            self.export_results()
+        
+        print("\n" + "="*70)
+        print("CUSTOMER SEGMENTATION ANALYSIS COMPLETED!")
+        print("="*70)
+        
+        return cluster_summary, centroid_df
+
+# Create an instance and run the analysis
+if __name__ == "__main__":
+    # Create customer segmentation instance
+    segmentation = CustomerSegmentation()
+    
+    # Run complete analysis
+    results = segmentation.run_complete_analysis()
+    
+    print("\nAnalysis completed! You can now:")
+    print("1. Review the cluster visualizations above")
+    print("2. Use the exported CSV file for further analysis")
+    print("3. Implement targeted marketing strategies for each segment")
